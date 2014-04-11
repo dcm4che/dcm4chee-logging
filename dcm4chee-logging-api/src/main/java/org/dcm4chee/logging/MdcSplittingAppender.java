@@ -44,6 +44,7 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.logging.ErrorManager;
 import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
 import org.slf4j.MDC;
@@ -61,11 +62,15 @@ import org.slf4j.MDC;
  *                          Note: the level of root logger must be INFO (or lower) to ensure that the last info log message
  *                                will trigger the close.
  * 
+ * MDC splitting must be enabled by logging "START_MDC_SPLITTING" (necessary because of (module) classloading issue with JAVA 7 during JBoss startup!)
+ * 
  * e.g.: Log each webservice request in its own log file:
  * ...
+ * log.info("START_MDC_SPLITTING);
  * String transactionID = [get transactionID (e.g. hashCode of SOAP msgID)]
  * MDC.put("ws_logging_dir", "/var/log/mywebservice");                         
  * MDC.put("ws_transactionID", transactionID);
+ * 
  * ...
  * [process webservice request with some logging] 
  * ...
@@ -111,6 +116,7 @@ import org.slf4j.MDC;
  */
 public class MdcSplittingAppender extends Handler {
 
+	private static boolean isActive;
     private String mdcPropertyLogDir;
     private String mdcPropertyLogFilename;
     private String mdcPropertyCloseLogFile;
@@ -191,6 +197,13 @@ public class MdcSplittingAppender extends Handler {
     
     @Override
     public boolean isLoggable(LogRecord record) {
+    	if (!isActive) {
+    		if ("START_MDC_SPLITTING".equals(record.getMessage())) {
+    			isActive = true;
+    		} else {
+    			return false;
+    		}
+    	}
         if (mdcPropertyLogFilename == null || MDC.get(mdcPropertyLogFilename) == null) {
             return false;
         } else if (mdcPropertyCloseLogFile != null && Boolean.valueOf(MDC.get(mdcPropertyCloseLogFile))) {
